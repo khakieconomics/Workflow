@@ -10,7 +10,7 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = F, warning = F, message = F)
 knitr::knit_hooks$set(inline = as.character)
-library(BSEcon); library(ggthemes)
+library(BSEcon); library(ggthemes); library(latex2exp)
 rinline <- function(code){
   html <- '<code  class="r">``` CODE` ```</code>'
   sub("CODE", code, html)
@@ -494,9 +494,12 @@ Any function that satisfies the following can be used as a distribution function
 3. The value of the function at $x$, $p(x)$, defines the relative probability of observing the value of $x$. 
 
 There are a huge number of possible parametric distributions that we can use, but the ones we choose
-will typically be decided by the nature (and constraints) of our data. Below we list the sorts of 
-things we need to check (typically by data visualization) in our data to help us choose the right 
-distributions, as well as describing some commonly-used distributions. 
+will typically be decided by the nature (and constraints) of our data. Each parametric distribution 
+is characterised by _parameters_. Typically, different values of these parameters imply different 
+distributions of the random variables. 
+
+Below we list the sorts of things we need to check (typically by data visualization) in our data to 
+help us choose the right distributions, as well as describing some commonly-used distributions. 
 
 #### Probability mass functions
 
@@ -539,9 +542,26 @@ There are many types of discrete random variables and things we should look out 
 
 When our random variable is continuous, we use _probability density functions_ to describe its probabilistic distribution. 
 These functions describe the relative likelihood of observing various values of a random variable. They also describe the 
-probability of observing values of a random variable within a range. For example, take a standard normal distribution 
+probability of observing values of a random variable within a range. For example, take a standard normal density (that is, 
+a normal density with mean $\mu = 0$ and scale $\sigma = 1$. To get the probability that a random variable with this distribution
+falls in the interval $(-0.5, 1)$ all we need to do is integrate the density between those values
+
+$$
+\text{Given } x \sim \text{Normal}(0, 1)
+$$
+$$
+p(-0.5 < x <1) = \int_{-0.5}^{1}\text{Normal}(x |\, 0, 1) dx
+$$
+
+This is illustrated below
 
 ```{r}
+
+bounded_dnorm <- function(x, mean, scale, lower, upper) {
+  ifelse(x<= upper & x >= lower, dnorm(x, mean, scale), 0)
+}
+
+
 ggplot(data.frame(x = c(-5,5))) +
   stat_function(aes(x = x), fun = dnorm) +
   labs(title = "Normal(0, 1) density evaluated\nat -0.5 and 1",
@@ -550,10 +570,76 @@ ggplot(data.frame(x = c(-5,5))) +
   geom_point(aes(x = c(1, 1), y = c(0, dnorm(1, 0, 1))) ) +
   geom_linerange(aes(ymin = 0, ymax = dnorm(1, 0, 1), x = 1))+
   geom_point(aes(x = c(-0.5, -0.5), y = c(0, dnorm(-0.5, 0, 1))) ) +
-  geom_linerange(aes(ymin = 0, ymax = dnorm(-0.5, 0, 1), x = -0.5))
+  geom_linerange(aes(ymin = 0, ymax = dnorm(-0.5, 0, 1), x = -0.5)) +
+  stat_function(fun = bounded_dnorm, args = list(mean = 0, scale = 1, lower = -0.5, upper = 1),geom = "area", alpha = 0.3, n = 1000) +
+  annotate("text", x = 0.25, y = 0.15, label = paste0("Prob\n = \n", round(pnorm(1) - pnorm(-0.5), 2))) +
+  annotate("text", x = -0.5, y = -0.02, label = "-0.5") +
+  annotate("text", x = 1, y = -0.02, label = "1") 
+  
 ```
 
-- Unbounded distributions
+Let's quickly discuss the notation used above. Above, we said "$\text{Given } x \sim \text{Normal}(0, 1)$". This can be read as "given
+that x (a random variable) is distributed with a normal density with location parameter 0 and scale parameter 1". Often we 
+use $\sim$ to denote a "sampling". For instance, you could generate draws of $x$ by drawing from a standard normal distribution. 
+If we wanted 1000 draws, we could do this in R like so: 
+
+```{r}
+x <- rnorm(1000, mean = 0, sd = 1)
+```
+
+or just 
+
+```{r}
+x <- rnorm(1000) # by default it's a standard normal
+```
+
+Just as with discrete random variables, we typically choose the type of continuous density
+based on the nature of the random variable we're modeling. The "default" is almost always
+a normal distribution, yet it often should not be. A few things we have to look out for: 
+
+- **Is the distribution bounded?**
+    - Often random variable has a natural bounding; for example, many prices should be positive, 
+    and for normal goods, we expect price elasticies of demand to be negative. Others are unbounded: 
+    GDP growth or inflation could be positive or negative. 
+    - When a random variable is unbounded, we use unbounded distributions. Commonly, the Normal
+    distribution, the Cauchy, Student's T, Double Exponential, and Gumbel distributions are used. 
+    - When the random variable is bounded, we use either truncated versions of the unbounded distributions above 
+    (these give no probability to values outside the bounding), or distributions that have a natural
+    bounding. Examples of the latter include the Gamma/inverse Gamma distribution, the exponential, 
+    and the lognormal distribution. Below we illustrate the density two bounded distributions---
+    
+```{r}
+library(truncnorm)
+
+truncated_student_t <- function(z, nu = 4) {
+  ifelse(z< 0, 0, dt(z, df = nu)*2)
+}
+
+truncated_dists <- ggplot(data.frame(x = c(-1,5))) +
+  stat_function(aes(x = x), fun = dtruncnorm, args = list(a = 0, b = Inf), n = 1000, colour = "red") +
+  stat_function(aes(x = x), fun = truncated_student_t, n = 1000) +
+  labs(title = "Truncated Normal and Student's T densities") +
+  annotate("text", x = 1.5, y = 0.7, label = "Half (standard)\nNormal", colour = "red") +
+  annotate("text", x = 3.5, y = 0.2, label = "Half Student's t\ndf = 4") +
+  theme_hc()
+  
+positive_dists <- ggplot(data.frame(x = c(-1,5))) +
+  stat_function(aes(x = x), fun = dgamma, args = list(rate = 4, shape = 2), n = 1000, colour = "red") +
+  stat_function(aes(x = x), fun = dexp,args = list(rate = 2),  n = 1000) +
+  labs(title = "Gamma and Exponential densities",
+       subtitle = "Are naturally bounded to positive values") +
+  annotate("text", x = 1.5, y = 0.7, label = "Gamma density\nrate = 4\nshape = 2", colour = "red") +
+  annotate("text", x = 3.5, y = 0.3, label = "Exponential density\nrate = 2") +
+  theme_hc()
+
+gridExtra::grid.arrange(truncated_dists, positive_dists)
+
+```
+    
+
+- **Does the random variable have "fat tails"?**
+    - 
+
   - With fat tails
 - Skewed distributions
 - Truncated distributions
