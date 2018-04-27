@@ -10,7 +10,7 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = F, warning = F, message = F)
 knitr::knit_hooks$set(inline = as.character)
-library(BSEcon); library(ggthemes)
+library(BSEcon); library(ggthemes); library(latex2exp)
 rinline <- function(code){
   html <- '<code  class="r">``` CODE` ```</code>'
   sub("CODE", code, html)
@@ -494,9 +494,12 @@ Any function that satisfies the following can be used as a distribution function
 3. The value of the function at $x$, $p(x)$, defines the relative probability of observing the value of $x$. 
 
 There are a huge number of possible parametric distributions that we can use, but the ones we choose
-will typically be decided by the nature (and constraints) of our data. Below we list the sorts of 
-things we need to check (typically by data visualization) in our data to help us choose the right 
-distributions, as well as describing some commonly-used distributions. 
+will typically be decided by the nature (and constraints) of our data. Each parametric distribution 
+is characterised by _parameters_. Typically, different values of these parameters imply different 
+distributions of the random variables. 
+
+Below we list the sorts of things we need to check (typically by data visualization) in our data to 
+help us choose the right distributions, as well as describing some commonly-used distributions. 
 
 #### Probability mass functions
 
@@ -539,9 +542,26 @@ There are many types of discrete random variables and things we should look out 
 
 When our random variable is continuous, we use _probability density functions_ to describe its probabilistic distribution. 
 These functions describe the relative likelihood of observing various values of a random variable. They also describe the 
-probability of observing values of a random variable within a range. For example, take a standard normal distribution 
+probability of observing values of a random variable within a range. For example, take a standard normal density (that is, 
+a normal density with mean $\mu = 0$ and scale $\sigma = 1$. To get the probability that a random variable with this distribution
+falls in the interval $(-0.5, 1)$ all we need to do is integrate the density between those values
+
+$$
+\text{Given } x \sim \text{Normal}(0, 1)
+$$
+$$
+p(-0.5 < x <1) = \int_{-0.5}^{1}\text{Normal}(x |\, 0, 1) dx
+$$
+
+This is illustrated below
 
 ```{r}
+
+bounded_dnorm <- function(x, mean, scale, lower, upper) {
+  ifelse(x<= upper & x >= lower, dnorm(x, mean, scale), 0)
+}
+
+
 ggplot(data.frame(x = c(-5,5))) +
   stat_function(aes(x = x), fun = dnorm) +
   labs(title = "Normal(0, 1) density evaluated\nat -0.5 and 1",
@@ -550,26 +570,155 @@ ggplot(data.frame(x = c(-5,5))) +
   geom_point(aes(x = c(1, 1), y = c(0, dnorm(1, 0, 1))) ) +
   geom_linerange(aes(ymin = 0, ymax = dnorm(1, 0, 1), x = 1))+
   geom_point(aes(x = c(-0.5, -0.5), y = c(0, dnorm(-0.5, 0, 1))) ) +
-  geom_linerange(aes(ymin = 0, ymax = dnorm(-0.5, 0, 1), x = -0.5))
+  geom_linerange(aes(ymin = 0, ymax = dnorm(-0.5, 0, 1), x = -0.5)) +
+  stat_function(fun = bounded_dnorm, args = list(mean = 0, scale = 1, lower = -0.5, upper = 1),geom = "area", alpha = 0.3, n = 1000) +
+  annotate("text", x = 0.25, y = 0.15, label = paste0("Prob\n = \n", round(pnorm(1) - pnorm(-0.5), 2))) +
+  annotate("text", x = -0.5, y = -0.02, label = "-0.5") +
+  annotate("text", x = 1, y = -0.02, label = "1") 
+  
 ```
 
-- Unbounded distributions
-  - With fat tails
-- Skewed distributions
-- Truncated distributions
-- Censored distributions
+Let's quickly discuss the notation used above. Above, we said "$\text{Given } x \sim \text{Normal}(0, 1)$". This can be read as "given
+that x (a random variable) is distributed with a normal density with location parameter 0 and scale parameter 1". Often we 
+use $\sim$ to denote a "sampling". For instance, you could generate draws of $x$ by drawing from a standard normal distribution. 
+If we wanted 1000 draws, we could do this in R like so: 
 
+```{r}
+x <- rnorm(1000, mean = 0, sd = 1)
+```
+
+or just 
+
+```{r}
+x <- rnorm(1000) # by default it's a standard normal
+```
+
+Just as with discrete random variables, we typically choose the type of continuous density
+based on the nature of the random variable we're modeling. The "default" is almost always
+a normal distribution, yet it often should not be. A few things we have to look out for: 
+
+- **Is the distribution bounded?**
+    - Often random variable has a natural bounding; for example, many prices should be positive, 
+    and for normal goods, we expect price elasticies of demand to be negative. Others are unbounded: 
+    GDP growth or inflation could be positive or negative. 
+    - When a random variable is unbounded, we use unbounded distributions. Commonly, the Normal
+    distribution, the Cauchy, Student's T, Double Exponential, and Gumbel distributions are used. 
+    - When the random variable is bounded, we use either truncated versions of the unbounded distributions above 
+    (these give no probability to values outside the bounding), or distributions that have a natural
+    bounding. Examples of the latter include the Gamma/inverse Gamma distribution, the exponential, 
+    and the lognormal distribution. Below we illustrate the density two bounded distributions---
+    
+```{r}
+library(truncnorm)
+
+truncated_student_t <- function(z, nu = 4) {
+  ifelse(z< 0, 0, dt(z, df = nu)*2)
+}
+
+truncated_dists <- ggplot(data.frame(x = c(-1,5))) +
+  stat_function(aes(x = x), fun = dtruncnorm, args = list(a = 0, b = Inf), n = 1000, colour = "red") +
+  stat_function(aes(x = x), fun = truncated_student_t, n = 1000) +
+  labs(title = "Truncated Normal and Student's T densities") +
+  annotate("text", x = 1.5, y = 0.7, label = "Half (standard)\nNormal", colour = "red") +
+  annotate("text", x = 3.5, y = 0.2, label = "Half Student's t\ndf = 4") +
+  theme_hc()
+  
+positive_dists <- ggplot(data.frame(x = c(-1,5))) +
+  stat_function(aes(x = x), fun = dgamma, args = list(rate = 4, shape = 2), n = 1000, colour = "red") +
+  stat_function(aes(x = x), fun = dexp,args = list(rate = 2),  n = 1000) +
+  labs(title = "Gamma and Exponential densities",
+       subtitle = "Are naturally bounded to positive values") +
+  annotate("text", x = 1.5, y = 0.7, label = "Gamma density\nrate = 4\nshape = 2", colour = "red") +
+  annotate("text", x = 3.5, y = 0.3, label = "Exponential density\nrate = 2") +
+  theme_hc()
+
+gridExtra::grid.arrange(truncated_dists, positive_dists)
+
+```
+    
+
+- **Does the random variable have "fat tails"?**
+    - Often we want to allow for "fat tails"---values of the random variable that are a long way from the bulk
+    of the distribution. Common use-cases are in modeling financial markets, where big positive and negative 
+    jumps in asset prices happen with some frequency. We also often use fat-tailed prior distributions (discussed
+    later in this chapter) to allow for the possibility that the true value of the unknown lies a long 
+    way from our prior. 
+    - Many densities have fat tails; for unbounded densities we often use Student's T, Cauchy and Gumbel densities; for positively-constrained variables we often use Exponential and Lognormal densities. 
+    
+    
 **Joint distributions**
+
+We are often interested in the _joint_ behaviour of random variables. 
 
 - Joint distributions
   - Correlation
   - Covariance
 
+#### Why parametric distributions? 
+
+In Bayesian modeling, we use parametric distributions for three main purposes. First, to describe the
+distribution of the observable variables that we are modeling given the unknowns in the model, and the 
+"knowns" that we're not modeling. For example, if we're modeling the joint distribution of unemployment, 
+wages growth and GDP growth, then we would choose a parametric distribution for their joint behaviour
+given the model unknowns and things that we don't want to model (say, fiscal policy). A wide variety of 
+parametric distributions, and even "mixtures" of them, can approximate many data that we see in the wild. 
+
+The second use is to allow us to summarise our prior information about model unknowns before fitting the 
+model. We discuss priors later in this chapter, but all you need to know for now is that we almost always
+use parametric distributions as priors. 
+
+Finally, we use parametric distributions to help us evaluate whether the model unknowns we propose
+are good or bad. In this sense, parametric distributions can act like _loss functions_ (to borrow a 
+term from machine learning), returning larger values when "better" unknowns are proposed. We discuss
+this more thoroughly in the Likelihood section of the chapter. 
+
 #### Parametric distributions have parameters
 
-- Which can be represented by functions involving other unknowns. Our goal is to estimate the values of the unknowns in these functions. 
+The defining characteristic of parametric distributions is that their shape is characterized by 
+a set of parameters. For instance, the normal distribution has a location (mean), often $\mu$, 
+and scale (standard deviation), often $\sigma$. Sometimes you will see the normal distribution
+"parameterized" in a different way, for instance with a location $\mu$ and variance $\sigma^{2}$. 
+Or perhaps using the location $\mu$ and "precision" $\tau = 1/\sigma^{2}$. Often it can be convenient
+to reparameterize models like this to aid in interpretability of estimates, or for computational reasons. 
 
+When we write
 
+$$
+y_{i} \sim \mbox{Normal}(\mu, \sigma)
+$$
+we read this as "each observation $i$ of the the random variable $y$ is distributed normally with location $\mu$ and scale $\sigma$". Given this information, we can calculate any statistic we want about the distribution 
+of yet-unseen values of $y$. For instance, the expected value $E[y] = \mu$, the standard deviation is $\sigma$, 
+and so the variance $\sigma^{2}$ and so on. Yet in general we want to replace the parameters of parametric 
+
+The entire game of model building using parametric distributions is to replace the parameters with functions 
+which may contain unknowns. For example, the normal linear model 
+
+$$
+y_{i} = X_{i}\beta + \epsilon_{i} \text{ with } \epsilon_{i}\sim \text{Normal}(0, \sigma)
+$$
+can be written 
+
+$$
+y_{i} \sim \text{Normal}(X_{i}\beta, \sigma)
+$$
+Note what we've done---we've simply replaced the location $\mu$ with a function describing the 
+conditional mean of observation $i$, $X_{i}\beta$. In this model, each observation can be centered
+around a different point ($\mu_{i} = X_{i}\beta$), but all have the same error scale around
+this point $\sigma$. This is a simple linear function, but there's nothing stopping us from replacing it 
+with something that contains more information---for example, it might be a function that finds 
+a Nash Equilibrium of some game (we'll see these in chapter 4). Just as easily, we could let each 
+observation have their own error scale, $\sigma_i = \exp(X_{i}\gamma)$
+
+$$
+y_{i} \sim \text{Normal}(X_{i}\beta, \exp(X_{i}\gamma))
+$$
+Most commonly, scale parameters are modeled explicitly in the finance and macroeconomics literature---we 
+cover several such models in chapter 5. A number of common distributions and their parameter names
+are given on the following page. 
+
+The following section describes how we can use parametric distributions---chosen with respect to our data---
+to evaluate the likelihood function of the data given a proposal of some unknowns. This is a step towards fitting
+models using Bayesian techniques. 
 
 \newpage
 
@@ -632,23 +781,56 @@ grid.arrange(a, b, c, d, e, f, g, h, nrow = 4, top ="Some common parametric dist
 
 \newpage
 
-### Random variables and their distributions
-- Random variables
-- Have distributions
-- The distribution of the random variable depends on the type
-- Parametric distributions have parameters
-- These can be represented by functions
-- The idea is to estimate the unknowns in these functions
+### The likelihood function
 
-### The likelihood
+In order to fit Bayesian models we need to construct a function that tells us when 
+certain values of model unknowns are good or bad. For example, in image \@ref(goodbaddensity) below,
+we plot a histogram of values of some random variable X. We want to fit a density function to this histogram
+so as to be able to make probabilistic statements about the likely distribution of yet-unseen observations. 
+To gage which proposed density is a good one, we would like a function that gives a higher value for 
+the proposed model unknowns that lead to the distribution in the bottom panel and lower values for 
+the proposed model unknowns that lead to distribution in the top panel. 
+
+```{r goodbandensity, fig.cap= 'A likelihood function would return a higher value for the proposed density on the bottom than the proposed density on top.'}
+
+df1 <-  data_frame(X = rnorm(100, 3, 3))
+dens_1 <- df1 %>%
+  ggplot(aes(x = X)) +
+  geom_histogram(aes(y = ..density..), alpha = 0.2) +
+  stat_function(fun = dnorm, args = list(mean = -1, sd = 1)) +
+  theme_hc() +
+  labs(title = "A bad proposed density",
+       subtitle = "Proposed location = -1, proposed scale = 1") +
+  ylim(0, .4)
+
+dens_2 <- df1 %>%
+  ggplot(aes(x = X)) +
+  geom_histogram(aes(y = ..density..), alpha = 0.2) +
+  stat_function(fun = dnorm, args = list(mean = 3, sd = 3)) +
+  theme_hc() +
+  labs(title = "A good proposed density",
+       subtitle = "Proposed location = 3, proposed scale = 3")+
+  ylim(0, .4)
+
+gridExtra::grid.arrange(dens_1, dens_2)
+
+```
+
+There are many functions that we could use to determine whether some proposed model unknowns 
+result in a "better" fit than some other unknowns. Likelihood functions are one approach. Under 
+the assumption that each observation in X is independent of the others, they give us the probability
+of observing the data given the parameters. This is most easily motivated with an example. 
+
+**Example: the binomial likelihood of loan defaults**
+
+Let's say we wanted to estimate the probability of loan defaults. We have a small sample---only five loans---
+and none have defaulted. Now let's come up with a proposed probability of default
+
 - What is a likelihood? 
 - Likelihoods of discrete variables
 - Likelihoods of continuous variables
 - Maximum likelihood estimation
 - Hierarchical models and the problem with maximum likelihood
-
-
-### What is a likelihood?
 
 Let's say we have a very simple linear model of $y$ with a single covariate $x$. $\alpha$, $\beta$ and $\sigma$ are the model's parameters. 
 
@@ -1003,7 +1185,7 @@ aa <- data_frame(a = rnorm(30, 2, .1), b = rnorm(30, .5, .05), sigma = rnorm(30,
 g <- ggplot(data.frame(x = c(-1, 5.5)), aes(x))
 for(i in 1:nrow(aa)) {
  g <- g +
-  stat_function(fun = dnorm, args = list(mean = c(aa$a[i] + aa$b[i]), sd = aa$sigma[i]), alpha = 0.3)  
+  stat_function(fun = dnorm, args = list(mean = c(aa$a[i] + aa$b[i]), sd = aa$sigma[i]), alpha = 0.2)  
 }
  
 g +
