@@ -787,7 +787,7 @@ In order to fit Bayesian models we need to construct a function that tells us wh
 certain values of model unknowns are good or bad. For example, in image \@ref(goodbaddensity) below,
 we plot a histogram of values of some random variable X. We want to fit a density function to this histogram
 so as to be able to make probabilistic statements about the likely distribution of yet-unseen observations. 
-To gage which proposed density is a good one, we would like a function that gives a higher value for 
+To gauge which proposed density is a good one, we would like a function that gives a higher value for 
 the proposed model unknowns that lead to the distribution in the bottom panel and lower values for 
 the proposed model unknowns that lead to distribution in the top panel. 
 
@@ -817,20 +817,118 @@ gridExtra::grid.arrange(dens_1, dens_2)
 ```
 
 There are many functions that we could use to determine whether some proposed model unknowns 
-result in a "better" fit than some other unknowns. Likelihood functions are one approach. Under 
-the assumption that each observation in X is independent of the others, they give us the probability
-of observing the data given the parameters. This is most easily motivated with an example. 
+result in a "better" fit than some other unknowns. Likelihood functions are one approach, based
+on the assumption that the proposed _generative distribution_ gave rise to the observed data. The. This is most easily motivated with an example. 
 
 **Example: the binomial likelihood of loan defaults**
 
 Let's say we wanted to estimate the probability of loan defaults. We have a small sample---only five loans---
-and none have defaulted. Now let's come up with a proposed probability of default
+and one has defaulted. If we encode defaulted = 1 and not defaulted = 0, then our data look like
 
-- What is a likelihood? 
-- Likelihoods of discrete variables
-- Likelihoods of continuous variables
-- Maximum likelihood estimation
-- Hierarchical models and the problem with maximum likelihood
+```{r}
+c(0, 0, 1, 0, 0)
+```
+
+The likelihood function answers the question "what is the probability of observing this sequence if the 
+probability of defaulting is $\theta$?" In the case that the outcomes are independent of each other, then
+this is the product of the _likelihood contributions_---the probability of observing each observation. The 
+probability of observing a non-default is $(1 - \theta)$, and so the probability of observing a default is 
+$\theta$. For example, let's say we think the probability of defaulting is 2%. Then our likelihood (the product of 
+the likelihood contributions) would be 
+
+$$
+p(y = (0, 0, 1, 0, 0)'|\, \theta = 0.02) = 0.98 \times 0.98 \times 0.02 \times 0.98 \times 0.98 = 0.0184
+$$
+
+The above is the specific case to this example. In general, the Bernoilli likelihood---the likelihood function
+we use for binary outcomes---is 
+
+$$
+p(y |\, \theta) = \prod_{i=1}^{N} \theta^{y_{i}}\times(1 - \theta)^{1 - y_i}
+$$
+
+Note that when $y_{i} = 0$---no default---$\theta^{y_{i}} = 1$. Now, is the proposed probability 
+of defaulting a good one? That's what we can use the likelihood function to perhaps determine. We 
+plot the values of the likelihood function for this data evaluated over the possible values of 
+$\theta$ below. 
+
+```{r bernoillilikelihood}
+bern_l <- function(theta) {
+  y <- c(0,0,1,0,0)
+  prod(theta^(y)* (1 - theta)^(1 - y))
+}
+ggplot(data.frame(theta = 0:1), aes(x = theta)) +
+  stat_function(fun = Vectorize(bern_l), n = 1000) +
+  theme_hc() +
+  labs(title = "Likelihood function for y given theta", 
+       y = "Likelihood") +
+  geom_linerange(aes(x = 0.2, ymin = 0, ymax = bern_l(0.2)), colour = "red", alpha = 0.3) +
+  annotate("text", x = 0.2, y = 0.085, label = "Likelihood at 0.2", alpha = 0.5, colour = "red")
+```
+
+What do we notice about this likelihood? First, it's _not_ a probability distribution
+in $\theta$---it does not integrate to 1. This is a common source of confustion, firstly because it looks
+like many of the distributions we're used to working with. But also because we write it as $\text{Likelihood} = p(y|\, \theta)$. 
+It _does_ integrate to 1 over the possible values of $y$, but not over the possible values of $\theta$. Second, 
+we notice that in this case it is maximized at 0.2, which happens to be the proportion of loans in our very 
+small sample that have defaulted. The maximum point of the likelihood function is known as the _maximum likelihood estimate_ (or MLE) 
+of our parameter $\theta$ given our data. Formally, 
+
+$$
+\hat\theta_{MLE} = \text{argmax}_{\theta}(p(y |\, \theta))
+$$
+The plot illustrates something potentially dangerous about using the Maximum likelihood estimate with small
+samples. In this case, before we did the analysis that the default rate was 2%. This is what we might call 
+_prior information_; information that exists from sources other than the sample of data we're analyzing. 
+Unfortunately our maximum likelihood estimate does not reflect this prior knowledge at all, and we're left
+with a probability of default simply equal to the sample frequency. Later in this chapter we'll discuss
+how to encode this outside information in our estimate. 
+
+**The Bernoulli log likelihood**
+
+In this simple example, in which we have only one unknown and very few data points, we have no problem 
+evaluating the likelihood function directly. Yet you might have noticed that as we provide more observations
+of $y$ to the function, it will get closer to 0---in the discrete case, the likelihood contribution of each
+observation is between 0 and 1, so multiplying more and more of them together results in a rapidly shrinking 
+likelihood value. If you had a large number of observations for example, your computer will simply not be able
+to handle that number of leading 0s. 
+
+```{r, echo = T}
+# draw 100k 0-1 coin flips
+y <- sample(0:1, 1e5, replace = T) 
+
+# A bernoulli likelihood function
+bernoulli_l <- function(theta, y) {
+  prod(theta^y * (1 - theta)^(1 - y))
+}
+# evaluate likelihood at the correct value
+bernoulli_l(0.5, y)
+```
+
+In order to handle these issues with numerical precision, we use the _log likelihood function_. This is, 
+as the name suggests, the log of the likelihood function. In the Bernoulli case, it's 
+
+$$
+\log(p(y |\, \theta)) = \log\left(\prod_{n=1}^{N} \theta^{y_{i}}\times(1 - \theta)^{1 - y_i}\right) = \sum_{i = 1}^{N} (y_{i}\times \log(\theta) + (1 - y_{i})\times \log(1 - \theta))
+$$
+
+Which makes use of the fact that $\log(ab) = log(a) + log(b)$ and $\log(a^{x}) = x\log(a)$. This representation of the likelihood is
+far easier for us to work with than the raw likelihood. For one, it is order preserving---the values of the unknowns that maximize
+the log likelihood are the same as those that maximize the likelihood---and yet we sum the log likelihood contributions, so small 
+probabilities don't send the value towards 0. Second, in some cases (for instance, with a binomial or categorical
+likelihood), you can evaluate it with linear algebra. If we want the likelihood of a vector $y = (0, 0, 1, 0, 0, \dots)'$ evaluated with the
+probability vector $\theta = (\theta_{1},\, \theta_{2},\dots)'$ denoting the probability of each observation, then the log likelihood is just 
+
+$$
+\log p(y |\,\theta) = y'\log(\theta) + (1 - y)'\log(1 - \theta)
+$$
+
+We use this formulation extensively in Chapter 4. 
+
+Now that we have a basic understanding of the log likelihood function, let's take a look at the log likelihood function
+for a model with a continuous outcome and three unknowns. 
+
+**Log likelihood of a simple normal linear model**
 
 Let's say we have a very simple linear model of $y$ with a single covariate $x$. $\alpha$, $\beta$ and $\sigma$ are the model's parameters. 
 
@@ -844,7 +942,8 @@ $$
 y_{i} \sim \mbox{N}(\alpha + \beta x_{i}, \sigma)
 $$
 
-This is the model we are saying _generates_ the data. It has three unknowns, $\alpha$, $\beta$ and 
+This is the model we are saying _generates_ the data---$\mbox{N}(\alpha + \beta x_{i}, \sigma)$ is 
+the _generative distribution_. It has three unknowns, $\alpha$, $\beta$ and 
 $\sigma$. If we knew what these values were for sure, we could make probabilistic statements about 
 what values $y_{i}$ might take if we knew the value of $x_{i}$. 
 
@@ -852,12 +951,10 @@ But that's not how data analysis normally works. Normally we're given values of 
 many $y$s) and have to infer the relationship between them, often with the help of some model. Our task
 is to estimate the values of the unknowns---in this case, $\alpha$, $\beta$ and $\sigma$. 
 
-So how do we do this by maximum likelihood? One thing that computers are really good at is choosing values
-of some unknowns in order to optimize the value of some function. So, what we want is some function---a
-way of scoring various combinations of $\alpha$, $\beta$ and $\sigma$ so that
-the score is high when the model describes the data well, and low when it does not. One such way
-of creating a score is to evaluate the _likelihood_ of the data given the parameters (and the proposed 
-generative model). 
+So how do we do this by maximum likelihood? One thing that computers are relatively good at is choosing values
+of some unknowns in order to optimize (normally minimize) the value of some function. Here we use the normal log
+likelihood function as a way of scoring various combinations of $\alpha$, $\beta$ and $\sigma$ so that
+the score is high when the model describes the data well, and low when it does not.
 
 Let's say we propose a set of parameters, $\alpha = 2$, $\beta = .5$ and $\sigma = 1$ and we have an 
 obervation $y_{i} = 1,\, x_{i} = 1$. Given the parameters
@@ -914,33 +1011,34 @@ density_1(theta = c(2, .5, log(1)),
           x = 1, y = 1)
 ```
 
-The value of the density at an observed outcome is the _likelihood contribution_ 
-$f(y_{i} | x_{i}, \alpha, \beta, \sigma)$ of a single datapoint. That's precisely what 
-we've just calculated above. You'll be able to see that this likelihood contribution
-is maximized (at infinity, so what $\alpha + \beta \times 1 = 1$ and $\sigma = 0$).
+Just as in the binary outcome case, the value of the density at an observed outcome is 
+the _likelihood contribution_ $f(y_{i} | x_{i}, \alpha, \beta, \sigma)$ of a single datapoint. 
+Unlike the binary case, this has no direct probabilistic interpretation except in relative terms. If the 
+continous density at a given value is twice the density at another, then the relative probability of observing
+the first value is twice the second. Also, the density needn't be less than one; when the likelihood is very narrow, 
+we routinely see values of the likelihood greater than 1. You'll be able to see that this likelihood contribution
+is maximized (at infinity) when it imposes a spike on the single observation we observe, ie, $\alpha + \beta \times 1 = 1$ and $\sigma = 0$).
 
 ```{r, echo = T}
 # log(0) -> -Inf
 density_1(c(0, 1, -Inf) , 1, 1)
 ```
 
-**Er Jim, we have more than one observation**
+**But we have more than one observation**
 
 We have one observation, three unknowns---of course this is an unidentified model. In reality 
 we have many more than one observation. So how do we use this principle of likelihood to 
-get estimates of the unknowns? 
+get estimates of the many model unknowns? 
 
 If we assume (conditional) independence of the draws--that is, the value of one observation's $\epsilon_{i}$
 has no influence on another's $\epsilon_{j}$, the sample likelihood of your data vector $y$ is 
 the _product_ of all the individual likelihoods $\prod_{i = 1}^{N}f(y_{i} | x_{i}, \alpha, \beta, \sigma)$. 
+This is identical to the binary outcomes likelihood abve. 
 
 You can probably see the problem here---for reasonably large spreads of the data, the value of the 
 density for a datapoint is typically less than 1, and the product of many such datapoints
-will be an extremely small number. Too small, even, for a computer to deal well with. 
-This might give us numerical issues. One way around this is to
-take the log of the likelihood---the Log Likelihood. Because the log of numbers in (0, 1) are negative
-numbers large in absolute value, the sum of these numbers will also have a large absolute value, 
-so we'll not get numerical issues in computation. 
+will be an extremely small number. And so just as in the binary case, we take the log likelihood
+of the data. 
 
 
 $$
@@ -957,19 +1055,24 @@ of this approach is best illustrated with an example.
 
 Imagine that we have an outlier---rather than $y_{j} = 1$ as in the image above, it is -10. Under the proposed
 model, we're essentially saying that the such an outcome is all but impossible. The probability of observing
-an observation that low or lower is `r pnorm(-10, 2.5, 1)`. The density of such a point would be `r dnorm(-10, 2.5, 1)`---a very small number. But the log of its density is large in absolute value: 
+an observation that low or lower is `r pnorm(-10, 2.5, 1)`. The density of such a point would be 
+`r dnorm(-10, 2.5, 1)`---a very small number. But the log of its density is large in absolute value: 
 `r log(dnorm(-10, 2.5, 1))`. Compare that with the log likelihood of the 
 original $y_{j} = 1$ : `r log(dnorm(1, 2.5, 1))`. An outlier penalizes the log likelhood far 
-more than a point at the mode. 
+more than a point at the mode, and consequently our maximum likelihood estimate will try to make sense
+of the outlier by dragging the entire distribution that way. 
 
-This idea helps us do good modeling: we want to give positive weight to outcomes that happen, and no weight to impossible outcomes. 
+This idea helps us do good modeling: we want to give positive weight to outcomes that happen, and no 
+weight to impossible outcomes. If in the data visualization step we notice some of these outliers (and they are
+real data rather than miscoded entries---which are common) then we will want to use distributions that make these
+possible. Use of these fat-tailed distributions is covered in Chapter 3. 
 
 **Maximum likelihood**
 
 Maximum likelihood estimators are simple: if the (log) likelihood is a unidimensional score of how well 
 the data fit the model for a (potentially large) number of parameters, then we can simply run an optimizer 
-that attempts to maximize this score by varying the values of the parameters. Such an estimator is called
-the maximum likelihood estimator.
+that attempts to maximize this score by varying the values of the parameters. If the optimizer is able to find
+us the mode of the likelihood, it gives us the maximum likelihood estimator (MLE). The mode needn't be 
 
 Let's get some practice at writing this out in R. Going through this exercise will help you understand
 what's going on under the hood in Stan. 
@@ -985,7 +1088,7 @@ y <- rnorm(1000, alpha + beta * x, sigma)
 ```
 
 Now that we have some fake data, let's write out the log likelihood function, as before. Note that because
-the optimization function we use _minimizes_ the function we need to returnt the _negative_ of the log likelihood
+the optimization function we use _minimizes_ the function, we need to return the _negative_ of the log likelihood
 (minimizing the negative is the same as maximizing the likelihood). 
 
 ```{r, echo = T}
