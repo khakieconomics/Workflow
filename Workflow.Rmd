@@ -37,6 +37,7 @@ The workflow is fairly simple:
 7. Fit the model to your real data, check the fit
 8. Argue about the results with your friends and colleagues
 9. Go back to 2. with a slightly richer model. Repeat. 
+10. Think carefully about what decisions will be made from the analysis, encode a loss function, and perform statistical decision analysis. 
 
 Each of these steps can be somewhat involved. This chapter described each step in some detail, with worked 
 examples. Where more depth may be required, we encourage you to read the referenced resources. 
@@ -158,7 +159,7 @@ We can convert from "tidy" data to a wide format using the `spread()` function, 
 columns which will be converted into column headers and the values within each column. 
 
 
-```{r, echo = F}
+```{r, echo = T}
 # There are four meaningless rows at the top of the file, which we exclude
 gdp_pc <- read_csv("data/API_NY.GDP.PCAP.CD_DS2_en_csv_v2.csv", skip = 4) 
 
@@ -583,13 +584,13 @@ that x (a random variable) is distributed with a normal density with location pa
 use $\sim$ to denote a "sampling". For instance, you could generate draws of $x$ by drawing from a standard normal distribution. 
 If we wanted 1000 draws, we could do this in R like so: 
 
-```{r}
+```{r, echo = T}
 x <- rnorm(1000, mean = 0, sd = 1)
 ```
 
 or just 
 
-```{r}
+```{r, echo = T}
 x <- rnorm(1000) # by default it's a standard normal
 ```
 
@@ -606,7 +607,7 @@ a normal distribution, yet it often should not be. A few things we have to look 
     - When the random variable is bounded, we use either truncated versions of the unbounded distributions above 
     (these give no probability to values outside the bounding), or distributions that have a natural
     bounding. Examples of the latter include the Gamma/inverse Gamma distribution, the exponential, 
-    and the lognormal distribution. Below we illustrate the density two bounded distributions---
+    and the lognormal distribution. Four examples are illustrated below. 
     
 ```{r}
 library(truncnorm)
@@ -645,6 +646,10 @@ gridExtra::grid.arrange(truncated_dists, positive_dists)
     way from our prior. 
     - Many densities have fat tails; for unbounded densities we often use Student's T, Cauchy and Gumbel densities; for positively-constrained variables we often use Exponential and Lognormal densities. 
     
+- **Top and bottom coding**
+    - Top and bottom coding involve a random variable having a limit, and being clustered at the limit. 
+    - TKTK
+    
     
 **Joint distributions**
 
@@ -657,8 +662,8 @@ We are often interested in the _joint_ behaviour of random variables.
 #### Why parametric distributions? 
 
 In Bayesian modeling, we use parametric distributions for three main purposes. First, to describe the
-distribution of the observable variables that we are modeling given the unknowns in the model, and the 
-"knowns" that we're not modeling. For example, if we're modeling the joint distribution of unemployment, 
+distribution of the observable variables that we are modeling (given the unknowns in the model, and the 
+"knowns" that we're not modeling). For example, if we're modeling the joint distribution of unemployment, 
 wages growth and GDP growth, then we would choose a parametric distribution for their joint behaviour
 given the model unknowns and things that we don't want to model (say, fiscal policy). A wide variety of 
 parametric distributions, and even "mixtures" of them, can approximate many data that we see in the wild. 
@@ -688,7 +693,7 @@ y_{i} \sim \mbox{Normal}(\mu, \sigma)
 $$
 we read this as "each observation $i$ of the the random variable $y$ is distributed normally with location $\mu$ and scale $\sigma$". Given this information, we can calculate any statistic we want about the distribution 
 of yet-unseen values of $y$. For instance, the expected value $E[y] = \mu$, the standard deviation is $\sigma$, 
-and so the variance $\sigma^{2}$ and so on. Yet in general we want to replace the parameters of parametric 
+and so the variance $\sigma^{2}$ and so on. 
 
 The entire game of model building using parametric distributions is to replace the parameters with functions 
 which may contain unknowns. For example, the normal linear model 
@@ -715,10 +720,6 @@ $$
 Most commonly, scale parameters are modeled explicitly in the finance and macroeconomics literature---we 
 cover several such models in chapter 5. A number of common distributions and their parameter names
 are given on the following page. 
-
-The following section describes how we can use parametric distributions---chosen with respect to our data---
-to evaluate the likelihood function of the data given a proposal of some unknowns. This is a step towards fitting
-models using Bayesian techniques. 
 
 \newpage
 
@@ -781,6 +782,11 @@ grid.arrange(a, b, c, d, e, f, g, h, nrow = 4, top ="Some common parametric dist
 
 \newpage
 
+The following section describes how we can use parametric distributions---chosen with respect to our data---
+to evaluate the likelihood function of the data given a proposal of some unknowns. This is a step towards fitting
+models using Bayesian techniques. 
+
+
 ### The likelihood function
 
 In order to fit Bayesian models we need to construct a function that tells us when 
@@ -818,7 +824,8 @@ gridExtra::grid.arrange(dens_1, dens_2)
 
 There are many functions that we could use to determine whether some proposed model unknowns 
 result in a "better" fit than some other unknowns. Likelihood functions are one approach, based
-on the assumption that the proposed _generative distribution_ gave rise to the observed data. The. This is most easily motivated with an example. 
+on the assumption that the proposed _generative distribution_ gave rise to the observed data. 
+This is most easily motivated with an example. 
 
 **Example: the binomial likelihood of loan defaults**
 
@@ -867,7 +874,7 @@ ggplot(data.frame(theta = 0:1), aes(x = theta)) +
 ```
 
 What do we notice about this likelihood? First, it's _not_ a probability distribution
-in $\theta$---it does not integrate to 1. This is a common source of confustion, firstly because it looks
+in $\theta$---it does not integrate to 1. This is a common source of confusion, firstly because it looks
 like many of the distributions we're used to working with. But also because we write it as $\text{Likelihood} = p(y|\, \theta)$. 
 It _does_ integrate to 1 over the possible values of $y$, but not over the possible values of $\theta$. Second, 
 we notice that in this case it is maximized at 0.2, which happens to be the proportion of loans in our very 
@@ -878,7 +885,7 @@ $$
 \hat\theta_{MLE} = \text{argmax}_{\theta}(p(y |\, \theta))
 $$
 The plot illustrates something potentially dangerous about using the Maximum likelihood estimate with small
-samples. In this case, before we did the analysis that the default rate was 2%. This is what we might call 
+samples. In this case, before we did the analysis, we had reason to believe that the default rate was 2%. This is what we might call 
 _prior information_; information that exists from sources other than the sample of data we're analyzing. 
 Unfortunately our maximum likelihood estimate does not reflect this prior knowledge at all, and we're left
 with a probability of default simply equal to the sample frequency. Later in this chapter we'll discuss
@@ -1027,7 +1034,7 @@ density_1(c(0, 1, -Inf) , 1, 1)
 **But we have more than one observation**
 
 We have one observation, three unknowns---of course this is an unidentified model. In reality 
-we have many more than one observation. So how do we use this principle of likelihood to 
+we have many observations. So how do we use this principle of likelihood to 
 get estimates of the many model unknowns? 
 
 If we assume (conditional) independence of the draws--that is, the value of one observation's $\epsilon_{i}$
@@ -1072,7 +1079,10 @@ possible. Use of these fat-tailed distributions is covered in Chapter 3.
 Maximum likelihood estimators are simple: if the (log) likelihood is a unidimensional score of how well 
 the data fit the model for a (potentially large) number of parameters, then we can simply run an optimizer 
 that attempts to maximize this score by varying the values of the parameters. If the optimizer is able to find
-us the mode of the likelihood, it gives us the maximum likelihood estimator (MLE). The mode needn't be 
+us the mode of the likelihood, it gives us the maximum likelihood estimator (MLE). This mode needn't be a good
+estimate of what we want to know. If we have good prior information, the MLE won't capture any of that. 
+And in some cases (as with the hierarchical models illustrated in the second worked example in this chapter)
+the MLE returns an objectively terrible estimate. 
 
 Let's get some practice at writing this out in R. Going through this exercise will help you understand
 what's going on under the hood in Stan. 
@@ -1103,7 +1113,7 @@ negative_log_likelihood <- function(theta, # the unknown parameters
 
 Now we optimize
 
-```{r}
+```{r, echo = T}
 estimates <- optim(par = c(1,1,1), negative_log_likelihood, x = x, y =y)
 
 estimated_alpha <- estimates$par[1]
@@ -1223,7 +1233,7 @@ negative_penalized_log_likelihood <- function(theta, # the unknown parameters
 
 Now we optimize
 
-```{r}
+```{r, echo = T}
 estimates <- optim(par = c(1,1,1), negative_penalized_log_likelihood, x = x, y =y)
 
 estimated_alpha <- estimates$par[1]
@@ -1339,6 +1349,7 @@ to evaluate the LPD we simply need to evaluate it for each, and sum across all d
 - Hierarchical models (or the "partial pooling" approach) lets us fit models that would otherwise be extremely noisy and get far more precise estimates in practice
 
 **Prior predictive analysis**
+
 - In order to choose priors; take our data
 - Draw from the prior
 - Draw from the distribution corresponding to the likelihood
@@ -1351,10 +1362,12 @@ to evaluate the LPD we simply need to evaluate it for each, and sum across all d
 ## A Modern Statistical Workflow
 
 Why use this workflow? Use when
+
   - You are building complex models and need to make sure that your software is correct
   - You want to learn about the model (and especially the impact of priors) more deeply
 
 The workflow
+
 - Plot your data and make notes of it
   - Outcome variables
   - Identify missing values
@@ -1363,12 +1376,15 @@ The workflow
   - Interactions
   - Outliers
   - Scale
+
 - Write down the likelihood
-  - Choose based on 
+  - Choose based on conditional distribution of the data and theory
+  
 - Choose priors for the unknowns
   - We want priors that a) encode outside information, improve the geometry of the posterior
   - In practice this means choosing priors that look like normal(0, 1) and reparameterizing the model
   so that this makes sense
+  
 - Draw from the priors (with example of how to do this in Stan)
 - Simulate fake data given your "knowns"
 - Fit the model to the fake data
@@ -1378,16 +1394,90 @@ The workflow
   - Divergent transitions
   - Energy
   - Shinystan
+
 - Reparameterize the model if you need to, and fit again
 - Evaluate fit: check parameter estimates against those used to generate the data
   - Scatter plots of known vs estimates
   - Coverage
   - Order statistics
+
 - Take to real data
   - Evaluate fit
   - Posterior predictive checking
   - Evaluate qualitative findings
+
 - Discuss with a critical audience
 - Make the model richer and repeat
+- Apply decision theory to the estimate
 
+```{r}
+
+area_1 <- function(x) ifelse(x<= 0, 0, dnorm(x, 2, .9))
+
+alpha <- 1
+beta <- 5
+delta <- 0.48
+mm <- 20
+
+truncated_dists <- ggplot(data.frame(x = c(-1,5))) +
+  stat_function(aes(x = x), fun = dnorm, args = list(mean = 2, sd = 0.9), n = 1000) +
+  stat_function(aes(x = x), fun = area_1, geom = "area", alpha = 0.2, n = 1000) +
+  theme_hc() +
+  labs(title = "Posterior distribution of a causal effect",
+       x = "Effect size",
+       y = "Density") +
+  annotate("text", x = 2, y = 0.15, label = "Prob(effect > 0) = 0.987")
+
+
+
+
+lossy <- function(x) ifelse((- beta*log(delta * x) - alpha)> mm | x<= 0, mm, -beta*log(delta * x) - alpha)
+d_lossy <- function(x) (lossy(x) - lossy(x-0.0000000001))/0.0000000001
+plot(d_lossy, -1, 5)
+dnormloss <- function(x) dnorm(lossy(x), 2, .9)
+plot(dnormloss, -1, 5)
+
+d_lossy(4)
+dloss <- function(x, mu, sigma) log(dnorm(lossy(x), mu, sigma)) + log(abs(d_lossy(x)))
+
+
+
+
+loss_fn <- ggplot(data.frame(x = c(-1,5))) +
+  stat_function(aes(x = x), fun = lossy, n = 1000) +
+  theme_hc() +
+  labs(title = "Loss function",
+       x = "Effect size",
+       y = "Loss") +
+  annotate("text", x = 2, y = 10, label = "Fixed rollout cost less diminishing\n benefits of treatment")
+
+
+loss_distribution <- ggplot(data.frame(x = c(-1,5))) +
+  stat_function(aes(x = x), fun = function(x) dnorm(x, 2, .9)*ifelse((- beta*log(delta* x) - alpha)> mm | x<= 0, mm, -beta*log(delta * x) - alpha), n = 1000) +
+  theme_hc() +
+  labs(title = "Posterior density * loss",
+       x = "Effect size",
+       y = "Loss") +
+  geom_vline(aes(xintercept = 2)) +
+  annotate("text", x = 3, y = 0.2, label = "Need to integrate this function")
+
+
+loss_dens <- ggplot(data.frame(x = c(-1,5))) +
+  stat_function(aes(x = x), fun = dloss, args = list(mu = 2, sigma = 0.9), n = 1000) +
+  theme_hc() +
+  labs(title = "Posterior density * loss",
+       x = "Effect size",
+       y = "Loss") +
+  geom_vline(aes(xintercept = 2))
+
+
+x <- rnorm(1000, 2, .9)
+
+mean(lossy(x))
+
+
+gridExtra::grid.arrange(truncated_dists, loss_fn, loss_distribution)
+
+
+```
 
