@@ -79,7 +79,7 @@ functions within this package which we'll use throughout the book.
 **Tidy data**
 
 One data format that makes both data preparation and modeling easier is the so-called "tidy data" format. The idea
-is to use data for which the the following hold
+is to use data for which the following hold
 
 - Each variable is a column
 - Each observation is a row
@@ -152,6 +152,9 @@ we should exclude. We do that using `-Date`. Run it again without excluding that
 We can convert from "tidy" data to a wide format using the `spread()` function, for which we provide the key and value
 columns which will be converted into column headers and the values within each column. 
 
+Let's repeat the same exercise for the World Bank data. 
+
+\bigskip
 
 ```{r, echo = T}
 # There are four meaningless rows at the top of the file, which we exclude
@@ -266,7 +269,7 @@ on a large number of US consumer loans (we'll use this dataset throughout the ch
 The central idea in `ggplot2` is to build up a plot, element by element. The basis of a ggplot object is 
 a blank plot, created with `ggplot()`. On top of this, we can add more layers, each a "geom". For instance, 
 a histogram is a type of geom; a set of lines is another; a density plot another still. The aesthetics of the geom, 
-for istance the position, colour, size etc., are given by a mapping from variables (columns in your tidy data) to 
+for instance the position, colour, size etc., are given by a mapping from variables (columns in your tidy data) to 
 "aesthetics". There are several new terms there---let's illustrate with some examples. 
 
 We can start with a blank plot, given by piping our tidy data into ggplot. As you can see, if we don't add any geoms, 
@@ -289,7 +292,7 @@ state_accounts_index %>%
 This does a good job at illustrating the fact that Western Australia grew extremely quickly during the 
 mining boom, and NSW and Tasmania did not. Yet the economies of NSW and Victoria are far larger than other
 states. How might we illustrate this? One approach is to create more mappings between the variables in our data
-and the acceptable aesthetics. 
+and the acceptable aesthetics, in this case, points whose size and opacity is related to the size of those states' economies. 
 
 ```{r, echo = T}
 state_accounts_index %>% 
@@ -305,7 +308,7 @@ Now we can see that the two biggest states have grown fairly slowly relative to 
 Western Australia and Queensland. The Northern Territory barely figures, given how few people live there. 
 
 This plot is starting to look ok. We still need to add some trimmings. Let's use a more attractive theme 
-(The "Tufte" theme, available in the `ggthemes`) package, and give it some new labels. Also, the alpha/size 
+(The `theme_bw()` theme maybe), and give it some new labels. Also, the alpha/size 
 legend (a `guide`) isn't very helpful, so we will remove it. 
 
 ```{r, echo = T}
@@ -314,7 +317,7 @@ state_accounts_index %>%
   geom_path(aes(x = Date, y = Index, 
                 colour = State, 
                 size = `Gross state product`), lineend = "round") +
-  ggthemes::theme_tufte() +
+  theme_bw() +
   labs(x = "Year",
        y = "Proportion of 2000 GSP",
        title = "Gross State Product relative to 2000",
@@ -335,7 +338,7 @@ state_accounts_index %>%
   ggplot() +
   geom_line(aes(x = Date, y = `Gross state product`, 
                 colour = State)) +
-  ggthemes::theme_tufte() +
+  theme_bw() +
   labs(x = "Year",
        y = "Millions of 2015 dollars",
        title = "Gross State Product",
@@ -367,7 +370,7 @@ state_accounts_index %>%
   ggplot() +
   geom_line(aes(x = Date, y = `Gross state product`/1000, 
                 colour = State)) +
-  ggthemes::theme_tufte() +
+  theme_bw() +
   labs(x = "Year",
        y = "Billions of 2015 dollars",
        title = "Gross State Product",
@@ -376,9 +379,8 @@ state_accounts_index %>%
   facet_wrap(~`State type`, scales = "free_y") 
 ```
 
-This concludes the very brief introduction to data manipulation and plotting using the `tidyverse` family of 
-packages. This aspect of the workflow is not especially academic, but is extremely important. The rest of the chapter 
-focuses on the more academic aspects of model building. 
+We've just taken a look at some useful techniques to manipulate and visualize data. Now let's 
+use these to perform an exploratory analysis of a real-life commercial dataset. 
 
 \newpage
 
@@ -430,11 +432,12 @@ they correspond to a borrower not having had any delinquencies.
 
 Let's clean up the data to do some exploratory analysis. 
 
-```{r, echp = T}
+```{r, echo = T}
 library(readr)
 # First take a look at the unique loan_status types and their counts
 table(mini_loans$loan_status)
 
+# Now make some new variables/clean existing ones
 mini_loans <- mini_loans %>% 
   mutate(defaulted = ifelse(grepl("Charged Off", loan_status), 1, 0),
          term = parse_number(term),
@@ -443,10 +446,12 @@ mini_loans <- mini_loans %>%
          no_delinquencies = as.numeric(is.na(mths_since_last_delinq)))
 ```
 
-What did we ust do? First, we created a new variable `defaulted`, which is 1 when the `loan_status` variable does
-not contain the words "Charged Off", and 0 otherwise. The reason we turn it into a numeric is that we can now calculate
+What did we ust do? First, we created a new variable `defaulted`, which is 1 when the `loan_status` variable contains 
+the words "Charged Off", and 0 otherwise. The reason we turn it into a numeric is that we can now calculate
 the proportion of loans in a group that have defaulted by simply taking the average of `defaulted` within the group. 
 For example, if we want to see which loan purposes are associated with more defaults, we could do the following: 
+
+\newpage 
 
 ```{r, echo = T}
 mini_loans %>% 
@@ -462,13 +467,16 @@ mini_loans %>%
   # Put the plot together
   ggplot(aes(x = purpose)) +
   # Roughly 95% confidence intervals for the proportions
-  geom_linerange(aes(ymin = proportion_defaulted - 2*standard_error, ymax = proportion_defaulted + 2*standard_error), colour = "green") +
+  geom_linerange(aes(ymin = proportion_defaulted - 2*standard_error, 
+                     ymax = proportion_defaulted + 2*standard_error), 
+                 colour = "green") +
   geom_point(aes(y = proportion_defaulted)) +
   theme_bw() +
   coord_flip() +
   labs(title = "Default rates by loan purpose")
 ```
 
+\newpage
 Lending Club use their own internal credit-worthiness `grade`, which should relate to 
 default rates. Let's take a look.
 
@@ -484,7 +492,9 @@ mini_loans %>%
   # Put the plot together
   ggplot(aes(x = grade)) +
   # Roughly 95% confidence intervals for the proportions
-  geom_linerange(aes(ymin = proportion_defaulted - 2*standard_error, ymax = proportion_defaulted + 2*standard_error), colour = "green") +
+  geom_linerange(aes(ymin = proportion_defaulted - 2*standard_error, 
+                     ymax = proportion_defaulted + 2*standard_error), 
+                 colour = "green") +
   geom_point(aes(y = proportion_defaulted)) +
   theme_bw() +
   labs(title = "Default rates by loan Lending Club grade")
@@ -495,6 +505,7 @@ at distinguishing loans that are likely to default and those that are not. One q
 we might have at this point is whether the loan purpose appears to predict defaults
 after we account for the grade. We can take a look by faceting.
 
+\newpage
 
 ```{r, echo = T}
 mini_loans %>% 
@@ -532,7 +543,7 @@ Let's examine a few of these variables.
 
 First let's plot income (in log 10 units) against the (jittered) binary default indicator, and include a non-linear
 regression curve. These plots are extremely powerful; you can at once see the distribution of outcomes,
-the distribution of the the variable on the x-axis, and, by overlaying a non-linear regression curve, 
+the distribution of the variable on the x-axis, and, by overlaying a non-linear regression curve, 
 the approximate conditional probability of default for a given person whose income is at the point along 
 the x-axis.
 
@@ -563,7 +574,7 @@ mini_loans %>%
 Interestingly, we don't see any clear relationship between job tenure and default probability. 
 
 Finally, let's look at how a borrower's debt servicability affects repayments. There are several variables
-commonly used to describe debt servicability, including the revolving debt utilization ratio. Let's look at this
+commonly used to describe debt servicability, including the revolving debt utilization ratio. Let's look at this.
 
 ```{r, echo = T}
 mini_loans %>% 
@@ -954,7 +965,7 @@ When we write
 $$
 y_{i} \sim \mbox{Normal}(\mu, \sigma)
 $$
-we read this as "each observation $i$ of the the random variable $y$ is distributed normally with location $\mu$ and scale $\sigma$". Given this information, we can calculate any statistic we want about the distribution 
+we read this as "each observation $i$ of the random variable $y$ is distributed normally with location $\mu$ and scale $\sigma$". Given this information, we can calculate any statistic we want about the distribution 
 of yet-unseen values of $y$. For instance, the expected value $E[y] = \mu$, the standard deviation is $\sigma$, 
 and so the variance $\sigma^{2}$ and so on. 
 
@@ -1242,7 +1253,7 @@ ggplot(data.frame(x = c(-1, 5.5)), aes(x)) +
   xlab("y") +
   ylab("Density") +
   ggtitle("A predictive density given alpha, beta,\nsigma, and x") +
-  ggthemes::theme_tufte()
+  theme_bw()
 ```
 
 Now we ask: what was the density at the _actual_ outcome $y_{i}$?
@@ -1255,7 +1266,7 @@ ggplot(data.frame(x = c(-1, 5.5)), aes(x)) +
   xlab("y") +
   ylab("Density") +
   ggtitle("We can evaluate at the actual outcome", subtitle = "f(y | x, a, b, s)") +
-  ggthemes::theme_tufte()
+  theme_bw()
 ```
 
 In `R`, we could go ahead and write a function that returns the density for 
@@ -1609,7 +1620,7 @@ g +
   xlab("y") +
   ylab("Density") +
   ggtitle("We can evaluate at the actual outcome\nover posterior draws", subtitle = "f(y | x, a, b, s)") +
-  ggthemes::theme_tufte()
+  theme_bw()
 ```
 
 The density of the data across posterior draws is known as the _log posterior density_ of
@@ -1625,7 +1636,7 @@ data_frame(`Log density` = dnorm(1, aa_big$a + aa_big$b, aa_big$sigma, log = T))
   ggplot(aes(x = `Log density`)) +
   geom_histogram() +
   ggtitle("Posterior density is a distribution, not a value") +
-  ggthemes::theme_tufte() #+
+  theme_bw() #+
   # geom_vline(aes(xintercept = dnorm(1, 2.5, 1, log = T)), colour = "red") +
   # geom_vline(aes(xintercept = mean(`Log density`)), colour = "blue")
 
