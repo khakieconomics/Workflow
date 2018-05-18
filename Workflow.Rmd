@@ -29,7 +29,7 @@ efficiency in the implementation.
 The workflow is fairly simple: 
 
 1. Prepare and visualize your data
-2. Come up with a generative model for the data. The first time, it should be as simple as possible.
+2. Come up with a generative model for the data. The first time, it should be as simple as possible
 3. Choose some priors for the model's unknowns. Draw some values from these priors
 4. Simulate some "fake data" from your model given a draw from these priors
 5. Fit your model to the fake data and check for the quality of the fit
@@ -43,13 +43,15 @@ Each of these steps can be somewhat involved. This chapter described each step i
 examples. Where more depth may be required, we encourage you to read the referenced resources. 
 We start by providing some background on basic data manipulation and plotting in R. Though this is not 
 a book about these "core data science" skills, the functions described here are used throughout the book, and 
-knowing them will be necessary for the exercises throught the book. next we cover random variables, 
+knowing them will be necessary for the exercises throught the book. Next we cover the concept of a model, random variables, 
 their distributions, the likelihood function, priors, and Bayes' rule. These concepts form the basis of 
 building probabilitic generative models. Next, we focus on how to choose priors, and why this depends on your model
 and your data. Then we go through the workflow above in details. Finally, we work through the 
-full workflow for two simple models. 
+full workflow for a basic credit scoring exercise. 
 
-## Some required knowledge
+\newpage
+
+## Part 1: Some basic data munging using the tidyverse
 
 This chapter deals with building probabilistic models of our data. Building such models requires
 that you understand at least the basics of probability, including how we think about random variables
@@ -58,19 +60,11 @@ can handle, manipulate and visualize data, which we'll call "core data science s
 a brief introduction to this required knowledge at a level that will help you understand what's going on 
 later, but not much deeper. It is certainly worth investing in improving your understanding
 of core data science skills and probability theory, but we leave a lot of the details to some other 
-resources. In particular, we recommend 
-
-**Core data science skills**
-
-- Hadley Wickham's data science in R
-
-**Probability theory**
-
-- This introduction from Michael Betancourt
-- This book for a deeper view (Jayne?)
-
-
-### Preparing and visualizing your data
+resources. For some wonderful recent resources on data science and probability theory, 
+we recommend Garrett Grolemund and Hadley Wickham's R for Data Science, available at 
+[http://r4ds.had.co.nz/](http://r4ds.had.co.nz/), and Michael Betancourt's introduction 
+to probability, available at 
+[https://betanalpha.github.io/assets/case_studies/probability_theory.html](https://betanalpha.github.io/assets/case_studies/probability_theory.html).
 
 Preparing and visualizing your data should be the first step to your analysis. It will help you discover potential issues
 far sooner in the analysis, and will help you to spot relationships that ought to be modeled. For data visualization 
@@ -258,12 +252,16 @@ for further lags by specifying the lag order `n`, `lag(x, n)`. The `last()` and 
 and first observations respectively. There is another function `nth()` which allows you to specify the position of the 
 element you want to return---so `nth(c(1,3,5,7), 3) = 5`. 
 
-### Plotting 
+\newpage
+
+## Part 2: Visualizing your data
 
 > The most powerful econometric tool is the eye
 
 Once our data are in a tidy format we can use the `ggplot2` package---also included in the `tidyverse` family, 
-to explore our data. This section provides a very brief introduction to this package. 
+to explore our data. This section provides a very brief introduction to this package. First we build a generic plot, 
+to show how we can make attractive, publication-ready plots. Next we perform some exploratory data analsysis 
+on a large number of US consumer loans (we'll use this dataset throughout the chapter). 
 
 The central idea in `ggplot2` is to build up a plot, element by element. The basis of a ggplot object is 
 a blank plot, created with `ggplot()`. On top of this, we can add more layers, each a "geom". For instance, 
@@ -375,7 +373,7 @@ state_accounts_index %>%
        title = "Gross State Product",
        caption = "Chained real GSP. Source: ABS") +
   guides(size = F, alpha = F) +
-  facet_grid(`State type` ~., scales = "free_y") 
+  facet_wrap(~`State type`, scales = "free_y") 
 ```
 
 This concludes the very brief introduction to data manipulation and plotting using the `tidyverse` family of 
@@ -384,7 +382,276 @@ focuses on the more academic aspects of model building.
 
 \newpage
 
-## Random variables and their distributions
+### A worked example of data preparation and visualization
+
+Now we know the basics of loading data and producing produce production-ready plots. Let's see 
+how we might want to use these tools for an exploratory data anlalysis of some real data 
+from a non-bank lender in the US. Later in the chapter we'll use this dataset to build 
+our first models. We will use a dataset of all loans made by US lending club platfom
+Lending Club, from 2007--2011. You can download a zip file containing these loans from [https://www.lendingclub.com/info/download-data.action](https://www.lendingclub.com/info/download-data.action). 
+
+Before starting, what are we trying to learn? Some important questions when building any model will include: 
+
+- What is it that we're interested in? 
+- What *type* of data are we modeling? (Continuous, binary, categorical etc.)
+- What relationships do we see between the variables in the data? 
+- Are there outliers, missing values, structural breaks that we should think about? 
+
+If we're looking at loans data, then it's probable that the question is one of "underwriting"---deciding
+whether or not to give a borrower a loan based on the information they provide when they apply. That is, 
+we're probably interested in whether a loan defaults---is charged off---and if so, how large the loss is. 
+
+First let's read the data and take a quick look.
+
+```{r, echo = T}
+library(tidyverse)
+loans <- read_csv("data/LoanStats3a.csv", skip = 1)
+head(loans[,1:10])
+```
+
+There are obviously a huge number of variables in this dataset, so let's look 
+at a few variables that might be relevant. 
+
+```{r, echo = T}
+# Make a data_frame that contains some relevant variables
+mini_loans <- loans %>% 
+  select(loan_status, total_pymnt, loan_amnt, term, int_rate, 
+         grade,  emp_length,  addr_state, mths_since_last_delinq,
+         home_ownership, revol_bal, revol_util, annual_inc,
+         purpose)
+
+glimpse(mini_loans)
+```
+
+What do we see? First, the data types are all quite different. The percentages are recorded as characters, 
+while they should be numbers. So is the loan `term`. We probably want to encode the `loan_status` as a numeric, 
+for reasons that will soon become clear. And the missing values in `mths_since_last_delinq` are meaningful, as 
+they correspond to a borrower not having had any delinquencies. 
+
+Let's clean up the data to do some exploratory analysis. 
+
+```{r, echp = T}
+library(readr)
+# First take a look at the unique loan_status types and their counts
+table(mini_loans$loan_status)
+
+mini_loans <- mini_loans %>% 
+  mutate(defaulted = ifelse(grepl("Charged Off", loan_status), 1, 0),
+         term = parse_number(term),
+         int_rate = parse_number(int_rate),
+         revol_util = parse_number(revol_util),
+         no_delinquencies = as.numeric(is.na(mths_since_last_delinq)))
+```
+
+What did we ust do? First, we created a new variable `defaulted`, which is 1 when the `loan_status` variable does
+not contain the words "Charged Off", and 0 otherwise. The reason we turn it into a numeric is that we can now calculate
+the proportion of loans in a group that have defaulted by simply taking the average of `defaulted` within the group. 
+For example, if we want to see which loan purposes are associated with more defaults, we could do the following: 
+
+```{r, echo = T}
+mini_loans %>% 
+  # Get rid of the observations with missing values for purpose
+  filter(!is.na(purpose)) %>%
+  # calculate groupwise proportions and their standard errors
+  group_by(purpose) %>% 
+  summarise(proportion_defaulted = mean(defaulted),
+            N = n(),
+            standard_error = sqrt(proportion_defaulted * (1 - proportion_defaulted)/N)) %>% 
+  # Use the reordering trick to make the plot attractive
+  mutate(purpose = reorder(purpose, proportion_defaulted)) %>%
+  # Put the plot together
+  ggplot(aes(x = purpose)) +
+  # Roughly 95% confidence intervals for the proportions
+  geom_linerange(aes(ymin = proportion_defaulted - 2*standard_error, ymax = proportion_defaulted + 2*standard_error), colour = "green") +
+  geom_point(aes(y = proportion_defaulted)) +
+  theme_bw() +
+  coord_flip() +
+  labs(title = "Default rates by loan purpose")
+```
+
+Lending Club use their own internal credit-worthiness `grade`, which should relate to 
+default rates. Let's take a look.
+
+
+```{r, echo = T}
+mini_loans %>% 
+  filter(!is.na(grade)) %>%
+  # calculate groupwise proportions and their standard errors
+  group_by(grade) %>% 
+  summarise(proportion_defaulted = mean(defaulted),
+            N = n(),
+            standard_error = sqrt(proportion_defaulted * (1 - proportion_defaulted)/N)) %>% 
+  # Put the plot together
+  ggplot(aes(x = grade)) +
+  # Roughly 95% confidence intervals for the proportions
+  geom_linerange(aes(ymin = proportion_defaulted - 2*standard_error, ymax = proportion_defaulted + 2*standard_error), colour = "green") +
+  geom_point(aes(y = proportion_defaulted)) +
+  theme_bw() +
+  labs(title = "Default rates by loan Lending Club grade")
+```
+
+This indeed confirms that Lending Club's credit scoring methodology does a good job 
+at distinguishing loans that are likely to default and those that are not. One question that
+we might have at this point is whether the loan purpose appears to predict defaults
+after we account for the grade. We can take a look by faceting.
+
+
+```{r, echo = T}
+mini_loans %>% 
+  filter(!is.na(grade) & !is.na(purpose)) %>%
+  # calculate groupwise proportions and their standard errors
+  group_by(grade, purpose) %>% 
+  summarise(proportion_defaulted = mean(defaulted),
+            N = n()) %>% 
+  group_by(purpose) %>% 
+  mutate(average_default_rate = mean(proportion_defaulted)) %>%
+  ungroup %>% 
+  mutate(purpose = reorder(purpose, average_default_rate)) %>%
+  # Put the plot together
+  ggplot(aes(x = purpose)) +
+  # Roughly 95% confidence intervals for the proportions
+  geom_point(aes(y = proportion_defaulted, colour = grade, size = N)) +
+  geom_line(aes(y = proportion_defaulted, colour = grade, group = grade)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = -90)) +
+  labs(title = "Default rates by loan Lending Club grade and loan purpose")
+```
+
+What do we see? First, there does indeed appear to be a difference within
+Lending Club grades across different loan purposes. Second, the worse grades 
+have far smaller sample sizes---which makes sense; a lender wouldn't want to put 
+many eggs in a very risky basket! This makes the riskier loans seem far more 
+volatile; this might be so, but it could just be the smaller sample sizes.
+Although there are differences across loan purposes, the majority of the
+differences appear to be across loan grades. 
+
+We would expect that those who default on their debts might be marginally attached to the workforce, 
+or at risk of losing their job. This is especially relevant for the dataset we're looking at, which 
+contains consumer loans during the perior of the global financial crisis and US recession. 
+Let's examine a few of these variables. 
+
+First let's plot income (in log 10 units) against the (jittered) binary default indicator, and include a non-linear
+regression curve. These plots are extremely powerful; you can at once see the distribution of outcomes,
+the distribution of the the variable on the x-axis, and, by overlaying a non-linear regression curve, 
+the approximate conditional probability of default for a given person whose income is at the point along 
+the x-axis.
+
+```{r, echo = T}
+options(scipen = 999)
+mini_loans %>% 
+  ggplot(aes(x = annual_inc, y = defaulted)) +
+  geom_jitter(alpha = 0.01, height = 0.05) +
+  geom_smooth() +
+  scale_x_log10() +
+  theme_bw() +
+  labs(title = "Probability of default by income")
+```
+
+We can do something similar with the years' employment; for this we will need to extract numbers from the employment
+length to perform ordering. 
+
+```{r, echo = T}
+mini_loans %>%
+  mutate(years_employment = parse_number(gsub("< 1", "0", emp_length))) %>% 
+  ggplot(aes(x = years_employment, y = defaulted)) +
+  geom_jitter(alpha = 0.01, height = 0.05) +
+  geom_smooth() +
+  theme_bw() +
+  labs(title = "Probability of default by years' employment")
+```
+
+Interestingly, we don't see any clear relationship between job tenure and default probability. 
+
+Finally, let's look at how a borrower's debt servicability affects repayments. There are several variables
+commonly used to describe debt servicability, including the revolving debt utilization ratio. Let's look at this
+
+```{r, echo = T}
+mini_loans %>% 
+  ggplot(aes(x = revol_util, y = defaulted)) +
+  geom_jitter(alpha = 0.01, height = 0.05) +
+  geom_smooth() +
+  theme_bw() +
+  labs(title = "Probability of default by utilization ratio") +
+  xlim(0, 100)
+```
+
+This tells us something we might already expect: that those who are using more of their available credit lines
+are far more likely to default than those who are not. 
+
+Above we've performed a quick exploratory analysis of a real-life commercial dataset. We've learned that 
+credit scores and loan purposes are both strongly associated with default risk, as is a high revolving utilization 
+rate, and a low income. 
+
+Now we're on our way to building a model, but not before building an understanding of the bits and pieces that go 
+into building a good model. The next secion describes these. 
+
+\newpage 
+
+## Part 3: A gentle introduction to required knowledge for modeling 
+
+This book is about modeling, and so it makes sense to describe what we think of as being a model. By thinking about models
+holistically, you'll find that you can move between domain areas with relative ease. The concepts in this section
+are just as applicable to economics as they are to pharmacometrics or natural language processing or computer vision. It's 
+all essentially the same! Fundamentally, any model has the following: 
+
+- A collection of "knowns"---variables that we treat as being known for sure, or assume to take
+particular values. If we're building a predictive model of whether a borrower defaults on a loan, this might be the information
+we have about the customer at the time we will be called on to make predictions. If we're a government choosing a fiscal policy, 
+it might be a projected spending pattern (even though this is not "known", for a modeling exercise it might be assumed to be
+known). In some cases, especially in time series and computer vision, the set of "knowns" might be empty.
+We often use $X$ for "knowns". 
+- Some "model unknowns", normally called $\theta$. These might be latent variables, coefficients, scales, weights, 
+etc. Throughout this book we'll use the term "model unknown" rather than the more common "parameter", which we'll reserve
+for a specific use. In principal, we can build any model and plonk values in place of these model unknowns, and perform
+some analysis (thought that analysis might be bunk). In fact, many applications of economics---particularly 
+computable general equilibrium modeling---involve "calibrating" models in precisely this way, using 
+"reasonable" assumed values for model unknowns. Poorly chosen values
+of these unknowns will typically make the model say useless things, and most of this book is about strategies to come up
+with good values for these unknowns. 
+- A "model structure", often denoted by $\mathcal{M}$. This is a mathematical structure that provides some mapping between 
+the coupling of our knowns $X$ and unknowns $\theta$, and some outcomes that we're interested in, $y$. In economics, this might be 
+as simple as linear model, or as complex as a large auction model or dynamic macroeconomic model. Outside economics, this
+could be a neural network for natural language processing, a Gaussian process for modeling voter preferences, or a 
+set of differential equations to model the impact of a drug on a biological system. 
+- A collection of "outcomes", $y$. These are the variables whose values we're interested in, either because we're trying to 
+generate predictions for them in the future, or because we're trying the generate predictions for them under different 
+policies or treatments. In economics these might be prices and sales, or macroeconomic variables like employment and 
+inflation. Outside economics the "outcome" might be whether a picture is of a "cat" or a "horse"; or perhaps
+whether an ill person recovers or dies of their illness.
+
+The sorts of models discussed in this book are *generative* or *probabilistic* models. Such models are probabilistic in the sense
+that for a given set of "knowns" $X$ and fixed values of the model unknowns $\theta$, there are many 
+plausible outcomes that could occur, and the outcomes we observe in our data are only one of many possible 
+outcomes that might have happened. The world which we're trying to approximate with a model *generates* 
+values for the outcomes, and so too should our model. More formally, a generative model is 
+a _joint probability distribution_ over the outcomes and model unknowns, holding the model 
+structure and known information fixed. 
+
+```{r observedunobserved, caption = "Fixed values of model knowns and unknowns pass through our generative model and result in many possible outcomes"}
+knitr::include_graphics('observed_unobserved.png', dpi = 192)
+```
+
+Again: fixed values of the model unknowns and knowns, when given to our generative model, will be able to "generate"
+some outcomes. If you give _the same_ values of knowns and unknowns to the model and ask it to generate some outcomes 
+another time, it will give you different outcomes. When performing generative modeling, 
+we don't start with the assumption that there's a deterministic one-to-one relationship between our inputs and outcomes. 
+Instead we say that there is a _probabilistic_ relationship between them. 
+
+Our challenge when modeling is to gain the best possible understanding of the values of the unknowns for some new
+data for which we want to perform prediction or policy analysis. This means "inverting" the relationship above: 
+if a given set of unknowns combined with a model and some knowns can generate many plausible outcomes, then
+each set of outcomes might be associated with many possible unknowns. If the outcomes cannot pin down
+the unknowns, we call the model *unidentified*. For example, the linear model $y_{i} = \beta \times 0 + \epsilon_{i}$ is 
+unidentified. Any value of $\beta$ could be consistent with some observed data. When the data are able to pin 
+down the unknowns, we say the model is *identified*. This language can be misused in economics, where the term "identification"
+is normally reserved for the process of identifying parameters in a causal model. We'll look more at this problem in 
+chapter 2. 
+
+Now that you have a basic understanding of the various bits of a model, let's step back a bit and 
+cover some required knowledge for building and fitting models. This will seem a little abstract at first, 
+so we've included some fairly simple examples. 
+
+### Random variables and their distributions
 
 The Bayesian approach to model building is centered around estimating the distribution of random variables. So what is a 
 random variable? And how do Bayesians think about random variables in their models? 
@@ -645,11 +912,7 @@ gridExtra::grid.arrange(truncated_dists, positive_dists)
     later in this chapter) to allow for the possibility that the true value of the unknown lies a long 
     way from our prior. 
     - Many densities have fat tails; for unbounded densities we often use Student's T, Cauchy and Gumbel densities; for positively-constrained variables we often use Exponential and Lognormal densities. 
-    
-- **Top and bottom coding**
-    - Top and bottom coding involve a random variable having a limit, and being clustered at the limit. 
-    - TKTK
-    
+
     
 **Joint distributions**
 
@@ -787,7 +1050,7 @@ to evaluate the likelihood function of the data given a proposal of some unknown
 models using Bayesian techniques. 
 
 
-### The likelihood function
+## Part 4: The likelihood function
 
 In order to fit Bayesian models we need to construct a function that tells us when 
 certain values of model unknowns are good or bad. For example, in image \@ref(goodbaddensity) below,
@@ -1128,39 +1391,19 @@ paste("estimate of sigma is", round(estimated_sigma, 2), "true value is", sigma)
 
 Hey presto! We just estimated a model by maximizing the likelihood by varying the parameters of our 
 model _keeping the data fixed_. You should note that this method can be applied more generally in 
-much larger, more interesting models. 
+much larger, more interesting models.
 
-### Prior distributions
+## Part 5: Bayes' rule and priors
 
-Prior distributions summarize our information about the values of parameters _before_ seeing the data. 
-For the uninitiated, this is the scary bit of building a Bayesian model, often because of fears of being
-biased, or having a poor understanding of how exactly the parameter influences the model. Such fears 
-are often revealed by the choice of extremely diffuse priors, for instance $\beta \sim \mbox{Normal}(0, 1000)$. 
-
-Don't be afraid of using priors. You almost always have high quality information about the values
-parameters might take on. For example: 
-
-- Estimates from previous studies
-- Some unknowns have sign restrictions (fixed costs or discount rates probably aren't negative; price elasticities of demand probably aren't positive)
-- The knowledge that regularization can help prevent over-fitting
-- The scale of effects are probably known. Going to college probably won't increase your income 100000%. 
-
-Prior distributions should be such that they put positive probabilistic weight on possible outcomes, and no weight 
-on impossible outcomes. In the example above, the standard deviation of the residuals, $\sigma$ must be positive. 
-And so its prior should not have probabilistic weight below 0. That might guide the choice to a distribution like a 
-half-Normal, half-Cauchy, half-Student's t, inverse Gamma, lognormal etc. 
-
-### Bayes rule
-
-Bayes rule gives us a method for combining the information from our data (the likelihood) and our priors. It says
-that the (joint) probability density of our parameter vector $\theta$ is
+Bayes rule gives us a method for combining the information from our data (the likelihood) and our priors, discussed below. It says
+that the (joint) probability density of our parameter vector $\theta$ is  
 
 $$
 \mbox{p}(\theta|\, y) = \frac{\mbox{p}(y|\, \theta)\, \mbox{p}(\theta)}{\mbox{p}(y)}
 $$
 
-where $\mbox{p}(y|\, \theta)$ is the likelihood, and $\mbox{p}(\theta)$ is the prior. We call $\mbox{p}(\theta|\, y)$ the 
-posterior. Because $\mbox{p}(y)$ doesn't depend on the vector of unknowns, $\theta$, we often express the posterior
+where $\mbox{p}(y|\, \theta)$ is the likelihood, and $\mbox{p}(\theta)$ is the *prior*. We call $\mbox{p}(\theta|\, y)$ the 
+*posterior*. Because $\mbox{p}(y)$ doesn't depend on the vector of unknowns, $\theta$, we often express the posterior
 up to a constant of proportionality
 
 $$
@@ -1169,14 +1412,71 @@ $$
 
 What can you take away from this? A few things: 
 
-- If the prior or likelihood is equal to zero for a given value of $\theta$, so too will be the posterior
+- If the prior or likelihood is equal to zero for a given value of $\theta$, so too will be the posterior (which is proportional to their product---if either is zero, so too must be the posterior)
 - If the prior is very peaked, the posterior well be drawn towards the prior
 - If the likelihood is very peaked (as tends to happen when you have many observations per unknown), 
 the posterior will be drawn towards the likelihood estimate. 
 
-Bayes' rule also tells us that in order to obtain a posterior, we need to have a prior and a likelihood. 
+Bayes' rule also tells us that in order to obtain a posterior, all we need is a prior and a likelihood 
+(and some strategy for combining them). 
 
-### Using penalized likelihood estimation
+### Prior distributions
+
+Prior distributions summarize our information about the values of unknowns in our model _before_ seeing the data. 
+For the uninitiated, this is the scary bit of performing Bayesian analysis, often because of fears of introducing
+biases, having a poor understanding of how exactly the parameter influences the model, or knowing 
+how exactly to summarize this prior information in a way that makes sense for computation (ie. which 
+prior distribution to choose). Such fears are often revealed by the choice of extremely diffuse priors, 
+for instance regression coefficients like $\beta \sim \mbox{Normal}(0, 1000)$. 
+
+Don't be afraid of using priors---good prior information radically improve the performance of models, as well
+as computation. You almost always have high quality information about the values parameters might take on. 
+For example: 
+
+- Estimates from previous studies;
+- Some unknowns have sign restrictions (fixed costs or discount rates probably aren't negative; 
+price elasticities of demand probably aren't positive);
+- The knowledge that "regularization" can help prevent over-fitting;
+- The scale of effects are probably known. Going to college probably won't increase your income 100000%. 
+
+Prior distributions should be such that they put positive probabilistic weight on possible values of the model unknowns, 
+and no weight on impossible values. In the simple linear model, the standard deviation of the residuals, $\sigma$ must be positive. 
+And so its prior should not have probabilistic weight below 0. That might guide the choice to a distribution like a 
+half-Normal, half-Cauchy, half-Student's t, inverse Gamma, lognormal etc.
+
+In a properly-posed model to be estimated with Bayesian techniques, all model unknowns must have priors. We almost always
+choose these priors from a set of parametric distributions, which themselves might have models for their parameters 
+(so-called "hierarchical priors"). We look at hierarchical priors later in this chapter, and again in chapters 2 and 
+3. The choice of prior depends on the type of parameter being modeled. Some common parameter types and choices include: 
+
+|Parameter type | Common prior distribution | 
+|---------------| -------------------|
+|Regression coefficient | (Unbounded or bounded) Normal, Student's T, Cauchy distributions |
+|High-dimensional coefficients | Double-exponential, Horseshoe prior, Finnish Horseshoe prior | 
+|Scale parameter (must be positive)| "Half" Normal, Student's T, Cauchy distributions; Gamma, Exponential etc. |
+|Correlation matrix | "LKJ" distribution |
+|Covariance matrix | Inverse Wishard matrix | 
+|Simplex (shares) | Dirichlet distribution |
+|Proportion (0-1 bounded continuous) | Beta distribution |
+
+Priors have a "regularizing" effect, meaning that they pull our estimates away from the likelihood and towards
+the prior. The "tighter" the prior, the greater this regularizing effect will be. If the prior puts 
+very little weight on the range of plausible values suggested by the likelihood function, 
+two things will happen: first, we will very often have computational issues in the model-fitting stage. 
+Second, even if we can get our model to fit, it will drag our estimates away from the likelihood and towards the 
+prior. At the limit, if the data contains no information about the value of a coefficient (for example a linear 
+regression $y = \alpha + \beta x + \epsilon$ where every observation of $x$ is 0), then our estimate will simply 
+be our prior.
+
+This regularizing effect of priors is perhaps the most controversial aspect of Bayesian modeling. A caricatured 
+criticism (correct to some degree) is that a Bayesian model could say just about anything depending on our choice
+of priors. This criticism is technically true, but does not reflect the practice of Bayesian modeling done well, 
+nor the advantages of using well-chosen priors. 
+
+
+## Part 6: Estimating Bayesian models
+
+### The MAP estimate
 
 Just as we can estimate a model using maximum likelihood, we can also estimate the _mode_ of the posterior
 using _penalized likelihood_ estimation. This is a really great way to start thinking about Bayesian estimation. 
@@ -1258,6 +1558,8 @@ in your model's unknowns when making predictions. For this, you'll need to _draw
 We'll not get there just yet---that's for another post. But just first, let's take a quick look at
 what a posterior really looks like in practical terms. 
 
+### Markov Chain Monte Carlo
+
 #### What does a posterior look like? 
 
 In Bayesian inference we do not get point estimates for the unknowns in our models; we estimate 
@@ -1333,20 +1635,15 @@ Note that the log posterior density can be evaluated _for each datapoint_; if we
 to evaluate the LPD we simply need to evaluate it for each, and sum across all datapoints.
 
 
-### Bayes rule
-- What is Bayes Rule
-- Approximating a distribution with draws
-- Markov Chain Monte Carlo
-- The Monte Carlo standard error
-- Fitting a model with MCMC in Stan
-- Fitting a model with penalized likelihood in Stan
-- What do posterior draws look like? What can I do with them?
 
-## Choosing priors
+## Part 4: A Modern Statistical Workflow
 
-- Priors help us to encode information about population-level knowledge that is absent from our sample-level data
-- They can help to regularize richly-parameterized models
-- Hierarchical models (or the "partial pooling" approach) lets us fit models that would otherwise be extremely noisy and get far more precise estimates in practice
+Why use this workflow? Use when
+
+  - You are building complex models and need to make sure that your software is correct
+  - You want to learn about the model (and especially the impact of priors) more deeply
+
+The workflow
 
 **Prior predictive analysis**
 
@@ -1358,15 +1655,6 @@ to evaluate the LPD we simply need to evaluate it for each, and sum across all d
   - Do they assign probabilistic weight to impossible outcomes?
   - Do they imply economically implausible outcomes? Such as market shares of 1, or negative prices?
   - Do they interact with the scale of the input data?
-
-## A Modern Statistical Workflow
-
-Why use this workflow? Use when
-
-  - You are building complex models and need to make sure that your software is correct
-  - You want to learn about the model (and especially the impact of priors) more deeply
-
-The workflow
 
 - Plot your data and make notes of it
   - Outcome variables
