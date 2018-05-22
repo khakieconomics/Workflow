@@ -608,9 +608,9 @@ all essentially the same! Fundamentally, any model has the following:
 - A collection of "knowns"---variables that we treat as being known for sure, or assume to take
 particular values. If we're building a predictive model of whether a borrower defaults on a loan, this might be the information
 we have about the customer at the time we will be called on to make predictions. If we're a government choosing a fiscal policy, 
-it might be a projected spending pattern (even though this is not "known", for a modeling exercise it might be assumed to be
-known). In some cases, especially in time series and computer vision, the set of "knowns" might be empty.
-We often use $X$ for "knowns". 
+it might be a projected spending pattern (even though this is not "known", for a modeling exercise we might pretend it is known
+for the sake of some policy simulation). In some cases, especially in time series and computer vision, 
+the set of "knowns" might be empty. We often use $X$ for "knowns". 
 - Some "model unknowns", normally called $\theta$. These might be latent variables, coefficients, scales, weights, 
 etc. Throughout this book we'll use the term "model unknown" rather than the more common "parameter", which we'll reserve
 for a specific use. In principal, we can build any model and plonk values in place of these model unknowns, and perform
@@ -620,7 +620,7 @@ computable general equilibrium modeling---involve "calibrating" models in precis
 of these unknowns will typically make the model say useless things, and most of this book is about strategies to come up
 with good values for these unknowns. 
 - A "model structure", often denoted by $\mathcal{M}$. This is a mathematical structure that provides some mapping between 
-the coupling of our knowns $X$ and unknowns $\theta$, and some outcomes that we're interested in, $y$. In economics, this might be 
+the coupling of our knowns $X$ and unknowns $\theta$, and some outcomes that we're interested in, $y$. In economics, this might be
 as simple as linear model, or as complex as a large auction model or dynamic macroeconomic model. Outside economics, this
 could be a neural network for natural language processing, a Gaussian process for modeling voter preferences, or a 
 set of differential equations to model the impact of a drug on a biological system. 
@@ -654,7 +654,7 @@ if a given set of unknowns combined with a model and some knowns can generate ma
 each set of outcomes might be associated with many possible unknowns. If the outcomes cannot pin down
 the unknowns, we call the model *unidentified*. For example, the linear model $y_{i} = \beta \times 0 + \epsilon_{i}$ is 
 unidentified. Any value of $\beta$ could be consistent with some observed data. When the data are able to pin 
-down the unknowns, we say the model is *identified*. This language can be misused in economics, where the term "identification"
+down the unknowns, we say the model is *identified*. This language can be confusing in economics, where the term "identification"
 is normally reserved for the process of identifying parameters in a causal model. We'll look more at this problem in 
 chapter 2. 
 
@@ -662,10 +662,91 @@ Now that you have a basic understanding of the various bits of a model, let's st
 cover some required knowledge for building and fitting models. This will seem a little abstract at first, 
 so we've included some fairly simple examples. 
 
+\newpage
+
 ### Random variables and their distributions
 
-The Bayesian approach to model building is centered around estimating the distribution of random variables. So what is a 
-random variable? And how do Bayesians think about random variables in their models? 
+The Bayesian approach to model building is centered around estimating the _distributions_ of _random variables_. 
+This section described what we mean by these terms. At first we'll just discuss random variables and their 
+distributions in a fairly abstract sense; that is, without relating them to modeling. Once we're familiar with 
+random variables, we'll describe how we use these ideas to help us build models. 
+
+**What is a random variable?**
+
+*Random* or *stochastic* variables are simply variables whose values result from some random phenomenon, or 
+some process that we don't fully understand. A more formal definition involving basic measure theory 
+can be found (here)[https://betanalpha.github.io/assets/case_studies/probability_theory.html]. When random
+variables can take an uncountably infinite number of values, they are said to be *continuous*; when they
+take on a countable number of values, they are *discrete*. 
+
+Often a generic random variable is denoted $X$,
+which should not be confused with the "knowns" in our model taxonomy above. A generic realization of a random variable
+by convention is in the lower case, so $x$ would be a realization of $X$. For example, $X$ might be "Sarah Smith's 
+potential income in 2018", while $x$ might be "the amount that Sarah Smith actually earned in 2018". Note here
+that the random variable here "Sarah's potential income" is entirely hypothetical---random variables are a 
+convenient way of representing and _idea_, and are not necessarily observed data. We'll get to the relationship between
+random variables and our data later in this section. 
+
+**All random variables have probability distributions**
+
+The point of using Bayesian methods is to understand the _joint probability distribution_ of a collection of random
+variables. Let's set aside the _joint_ part of this and briefly define a probability distribution. 
+A probability distribution, also known as a _probability density_ (for continuous random variables)
+or a _probability mass_ (for discrete random variables) is a function that describes the relative probability of observing
+various values of a random variable. Formally, a probability distribution is a function $p()$ that assigns 
+some non-negative value to each possible realization of a random variable, and sums (integrates) to 1 over all
+possible values of the random variable. That is, a probability distribution says that _some outcome_ must happen, 
+and describes the relative probabilites of each. If $p()$ assigns a value of 0 to some value of a random 
+variable (formally, $p(X=x) = 0$ for some $x$), we do not think it's possible to for $X$ to take on the 
+value $x$. If $p(X=x_{1}) > p(X= x_{2})$, it is more probable to observe a value of $X$ with the 
+value $x_{1}$ than $x_{2}$. 
+
+The notation for probability distributions $p()$ is _overloaded_, which is to say that if we have two 
+random variables $X$ and $Y$, then the function $p(X)$ is different to the function $p(Y)$. And neither
+of these function need to have a neat analytical form. When we can represent $p()$ with an algebraic 
+expression with a fixed number of parameters, then we say that $p()$ is a *parametric* distribution function. 
+If we know the distribution of a random variable with certainty, then we can also make probabilistic 
+statements about the random variable falling within a set of values.
+
+We typically do not know the distribution of the random variable, and have to infer what it might be. 
+
+From this distribution, we can make probabilistic statements, like "The probability of a randomly chosen male
+between 30-39 being less than 5'4" is 3.1%." The distribution above is known as an _empirical distribution_, 
+the actual distribution of some data---in this case, from a population. When we bucket the data and present it like
+this it is is also known as a _histogram_. 
+
+Such a distribution is said to be _nonparametric_, in that we aren't using a parameterized analytical function 
+to describe the relative probabilities of various heights. Note we can always draw a histogram of our data, 
+indeed doing so is an important part of the modeling process. 
+
+In this example, we can plot the "true" empirical distribution of the data. First, human heights are _observable_. 
+Whenever a variable is observable, we can calculate its distribution directly, at least for 
+the sample of data that we have at hand. (There is undoubtedly some measurment error, but we'll ignore that for now). 
+Second, this is data from the census, so  the distribution of heights that we observe is approximately equal 
+to the true distribution of heights in the population. In most applied modeling work, few of these properties 
+are satisfied; we often don't observe what we are truly interested in, and don't observe data at the population 
+level. And so we need to make some assumptions. 
+
+When we build economic models, we're almost always interested in unobservables. If we are performing causal inference 
+on a public policy experiment, we're interested in _treatment effects_---how much a policy impacts various stakeholders---
+which we never truly observe. A macroeconomist might want to know the impact of some fiscal policy on unemployment in a 
+counterfactual state---again, unobserved. And engaging in a forecasting exercise involves making inference about an unknown, 
+the future values of some series. 
+
+Just as applied economists aren't estimating the distributions of observed variables, applied economists rarely 
+observe population-level data, relying on samples drawn from potentially biased sources. 
+This isn't always the case; there is an exciting literature that makes use of population-level data from taxation agencies, for instance, Chetty (bunch of papers) and Kleven (some more). Yet most of the time we're being asked to draw inference for
+some new population (or the current population in the future). 
+
+When it comes to unobserved random variables, we're left with a sad reality: we cannot see them! So we can't calculate
+their empirical distribution.  In order to make the analysis tractable, we need to make some more assumptions. In classical 
+econometrics, these assumptions tend to center on the limiting distribution of random variables as the sample size approaches
+infinity. In many cases, for instance the tax studies by Chetty and Kleven cited above, these assumptions are very 
+likely to be satisfied. Yet when our data are of a more limited size, or if the number of unknowns is high relative to
+the sample size, then we will need to make some further assumptions in order to say anything meaningful about
+the random variables in our model. That's where Bayesian modeling comes in. 
+
+**How do we use random variables in our modeling?**
 
 Here are two questions for you. Do you know how much you are going to earn over the next three years? 
 And are you aware how much reading through this book will affect those earnings? These sorts of questions get to the nub
@@ -692,75 +773,6 @@ week or a person's sex in a model to help predict some (random) outcome, we woul
 them as random variables. When we use these variables in a model, we typically call them _covariates_, 
 _predictors_ or in the machine-learning world, _features_.
 
-
-**All random variables have distributions**
-
-The point of using Bayesian methods is to understand the _joint distribution_ of random
-variables. Let's set aside the _joint_ part of this and briefly define a probability distribution. 
-A probability distribution, also known as a _probability density_ (for continuous random variables)
-or a _probability mass_ (for discrete random variables) describes the relative probability of observing
-various values of a random variable. If we know the distribution of a random variable with certainty, 
-then we can also make probabilistic statements about the random variable falling within a set of values.
-We typically do not know the distribution of the random variable, and have to infer what it might be. 
-
-As an example, let's say we're interested in the heights of men. The below comes from the US government's 
-Census bureau: 
-
-```{r heights, fig.cap = "Heights of males in the US, 30-39y", echo = F}
-library(ggplot2)
-height_cdf <- c(3.1, 4.4, 6.7, 13.1, 19.6, 32.2, 45.4, 58.1, 69.4, 78.5, 89.0, 94.0, 95.8, 97.6, 99.4, 99.5)
-height_proportions <- diff(c(0, height_cdf, 100))
-height <- seq(from = 160.02, by = 2.54, length.out = length(height_cdf))
-labels <- c("<= 5'3", paste0("5'", 4:11,'"'), paste0("6'", 0:6, '"'), paste0(">=6'", '6"'))
-
-data.frame(labels = reorder(labels, 1:length(labels)), height_proportions) %>% 
-  ggplot() +
-  geom_bar(aes(x = labels, y = height_proportions), stat = "identity", alpha = 0.4) +
-  labs(x = "Height (feet)",
-       y = "Per cent of male population 30-39 yo",
-       title = "Distribution of male heights") +
-  ggthemes::theme_hc() +
-  geom_text(aes(x = labels, y = height_proportions +1, label = round(height_proportions, 1)), alpha =.3) +
-  coord_flip() +
-  theme(panel.grid.major = element_blank())
-
-```
-
-From this distribution, we can make probabilistic statements, like "The probability of a randomly chosen male
-between 30-39 being less than 5'4" is 3.1%." The distribution above is known as an _empirical distribution_, 
-the actual distribution of some data---in this case, from a population. When we bucket the data and present it like
-this it is is also known as a _histogram_. 
-
-Such a distribution is said to be _nonparametric_, in that we aren't using a parameterized analytical function 
-to describe the relative probabilities of various heights. Note we can always draw a histogram of our data, 
-indeed doing so is an important part of the modeling process. 
-
-In this example, we can plot the "true" empirical distribution of the data. First, human heights are an _observable_
-random variable. Whenever a random variable is observable, we can calculate its distribution directly, at least for 
-the sample of data that we have at hand. (There is undoubtedly some measurment error, but we'll ignore that for now). 
-Second, this is data from the census, so  the distribution of heights that we observe is approximately equal 
-to the true distribution of heights in the population. In most applied modeling work, few of these properties 
-are satisfied; we often don't observe what we are truly interested in, and don't observe data at the population 
-level. And so we need to make some assumptions. 
-
-When we build economic models, we're almost always interested in unobservables. If we are performing causal inference 
-on a public policy experiment, we're interested in _treatment effects_---how much a policy impacts various stakeholders---
-which we never truly observe. A macroeconomist might want to know the impact of some fiscal policy on unemployment in a 
-counterfactual state---again, unobserved. And engaging in a forecasting exercise involves making inference about an unknown, 
-the future values of some series. 
-
-Just as applied economists aren't estimating the distributions of observed variables, applied economists rarely 
-observe population-level data, relying on samples drawn from potentially biased sources. 
-This isn't always the case; there is an exciting literature that makes use of population-level data from taxation agencies, for instance, Chetty (bunch of papers) and Kleven (some more). Yet most of the time we're being asked to draw inference for
-some new population (or the current population in the future). 
-
-When it comes to unobserved random variables, we're left with a sad reality: we cannot see them! So we can't calculate
-their empirical distribution.  In order to make the analysis tractable, we need to make some more assumptions. In classical 
-econometrics, these assumptions tend to center on the limiting distribution of random variables as the sample size approaches
-infinity. In many cases, for instance the tax studies by Chetty and Kleven cited above, these assumptions are very 
-likely to be satisfied. Yet when our data are of a more limited size, or if the number of unknowns is high relative to
-the sample size, then we will need to make some further assumptions in order to say anything meaningful about
-the random variables in our model. That's where Bayesian modeling comes in. 
 
 ### Analytical (parametric) distributions
 
