@@ -703,12 +703,17 @@ value $x_{1}$ than $x_{2}$.
 
 The notation for probability distributions $p()$ is _overloaded_, which is to say that if we have two 
 random variables $X$ and $Y$, then the function $p(X)$ is different to the function $p(Y)$. And neither
-of these function need to have a neat analytical form. When we can represent $p()$ with an algebraic 
-expression with a fixed number of parameters, then we say that $p()$ is a *parametric* distribution function. 
-If we know the distribution of a random variable with certainty, then we can also make probabilistic 
-statements about the random variable falling within a set of values.
+of these function need to have a neat analytical form. When we can represent $p()$ with a mathematical
+expression with a fixed number of parameters, then we say that $p()$ is a *parametric* distribution 
+function. If we cannot express $p(X)$ analytically, then $p(X)$ is *nonparametric*. A great deal of 
+statistical modeling involves finding ways of approximating nonparametric distributions with parametric ones, 
+and finding ways of extracting information from nonparametric distributions efficiently. 
 
-We typically do not know the distribution of the random variable, and have to infer what it might be. 
+If we know the distribution of a random variable with certainty, then we can also make probabilistic 
+statements about the random variable falling within a set of values. Yet we typically do not know the 
+distribution of the random variable, and have to infer what it might be. 
+
+
 
 From this distribution, we can make probabilistic statements, like "The probability of a randomly chosen male
 between 30-39 being less than 5'4" is 3.1%." The distribution above is known as an _empirical distribution_, 
@@ -1071,6 +1076,8 @@ grid.arrange(a, b, c, d, e, f, g, h, nrow = 4, top ="Some common parametric dist
 The following section describes how we can use parametric distributions---chosen with respect to our data---
 to evaluate the likelihood function of the data given a proposal of some unknowns. This is a step towards fitting
 models using Bayesian techniques. 
+
+### Histograms
 
 
 ## Part 4: The likelihood function
